@@ -1,0 +1,15 @@
+{
+  "domain": "thitronik_wipro",
+  "name": "Thitronik WiPro III",
+  "codeowners": ["@hflocki"],
+  "config_flow": true,
+  "documentation": "https://www.thitronik.de",
+  "iot_class": "local_polling",
+  "bluetooth": [
+    {
+      "service_uuid": "20546869-7472-6f6e-696b-20476d624820"
+    }
+  ],
+  "requirements": ["bleak"],
+  "version": "1.0.0"
+}
