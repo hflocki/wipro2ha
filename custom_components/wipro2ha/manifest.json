@@ -1,5 +1,5 @@
 {
-  "domain": "thitronik_wipro",
+  "domain": "wipro2ha",
   "name": "Thitronik WiPro III",
   "codeowners": ["@hflocki"],
   "config_flow": true,
