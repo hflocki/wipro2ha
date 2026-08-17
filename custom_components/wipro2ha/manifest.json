@@ -3,7 +3,7 @@
   "name": "Thitronik WiPro III",
   "codeowners": ["@hflocki"],
   "config_flow": true,
-  "documentation": "https://www.thitronik.de",
+  "documentation": "https://github.com/hflocki/wipro2ha",
   "iot_class": "local_polling",
   "bluetooth": [
     {
