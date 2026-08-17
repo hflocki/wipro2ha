@@ -1,7 +1,7 @@
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.core import HomeAssistant, callback
 
-DOMAIN = "thitronik_wipro"
+DOMAIN = "wipro2ha"
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     async_add_entities([
