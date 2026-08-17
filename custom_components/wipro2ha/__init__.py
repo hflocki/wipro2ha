@@ -3,7 +3,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from bleak import BleakClient
 
-DOMAIN = "thitronik_wipro"
+DOMAIN = "wipro2ha"
 STATUS_UUID = "57695072-6f20-5374-6174-757320202020"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
