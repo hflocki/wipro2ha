@@ -2,7 +2,7 @@ from homeassistant import config_entries
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak, async_discovered_service_info
 import voluptuous as vol
 
-DOMAIN = "thitronik_wipro"
+DOMAIN = "wipro2ha"
 
 class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
