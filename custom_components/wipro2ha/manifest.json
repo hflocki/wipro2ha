@@ -10,6 +10,6 @@
       "service_uuid": "20546869-7472-6f6e-696b-20476d624820"
     }
   ],
-  "requirements": ["bleak"],
+  "requirements": ["bleak", "bleak-retry-connector"],
   "version": "1.0.1"
 }
