@@ -1,8 +1,0 @@
-.venv/
-venv/
-ENV/
-*.venv
-.zed/
-__pycache__/
-*.pyc
-.pytest_cache/
