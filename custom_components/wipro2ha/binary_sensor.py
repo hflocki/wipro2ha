@@ -6,14 +6,46 @@ from homeassistant.core import HomeAssistant, callback
 
 DOMAIN = "wipro2ha"
 
+
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
-    async_add_entities([
-        WiProAlarmSensor(hass, "Alarmanlage Scharf", byte_index=1, bitmask=0x0C, device_class=BinarySensorDeviceClass.SAFETY),
-        WiProSensor(hass, "Funkkontakt Offen", byte_index=6, bitmask=0xFF, device_class=BinarySensorDeviceClass.WINDOW),
-        WiProRawSensor(hass, "Raw Data")
-    ])
+    # Main entities: Armed status, overall contact status, and raw data entity
+    entities = [
+        WiProAlarmSensor(
+            hass,
+            "Alarmanlage Scharf",
+            byte_index=1,
+            bitmask=0x0C,
+            device_class=BinarySensorDeviceClass.SAFETY,
+        ),
+        WiProSensor(
+            hass,
+            "Funkkontakt Gesamt",
+            byte_index=6,
+            bitmask=0xFF,
+            device_class=BinarySensorDeviceClass.WINDOW,
+        ),
+        WiProRawSensor(hass, "Raw Data"),
+    ]
+
+    # Dynamically generate 8 individual bit sensors for byte index 6 to identify contacts
+    for bit in range(8):
+        bitmask = 1 << bit
+        entities.append(
+            WiProSensor(
+                hass,
+                f"Funkkontakt Bit {bit} (0x{bitmask:02X})",
+                byte_index=6,
+                bitmask=bitmask,
+                device_class=BinarySensorDeviceClass.WINDOW,
+            )
+        )
+
+    async_add_entities(entities)
+
 
 class WiProBaseSensor(BinarySensorEntity):
+    """Base class for all WiPro binary sensors."""
+
     def __init__(self, hass, name, device_class=None):
         self._hass = hass
         self._attr_name = f"WiPro {name}"
@@ -21,6 +53,7 @@ class WiProBaseSensor(BinarySensorEntity):
         self._attr_is_on = False
 
     async def async_added_to_hass(self):
+        """Subscribe to incoming raw BLE data events from Home Assistant event bus."""
         @callback
         def handle_raw_data(event):
             raw_hex = event.data.get("raw")
@@ -35,9 +68,13 @@ class WiProBaseSensor(BinarySensorEntity):
         self._hass.bus.async_listen(f"{DOMAIN}_raw_data", handle_raw_data)
 
     def update_from_hex(self, data: bytes):
+        """Base method to be overridden by subclasses for parsing data."""
         pass
 
+
 class WiProAlarmSensor(WiProBaseSensor):
+    """Sensor specifically for exact bitmask match (e.g., Armed state on byte 1)."""
+
     def __init__(self, hass, name, byte_index, bitmask, device_class=None):
         super().__init__(hass, name, device_class)
         self._byte_index = byte_index
@@ -45,10 +82,13 @@ class WiProAlarmSensor(WiProBaseSensor):
 
     def update_from_hex(self, data: bytes):
         if len(data) > self._byte_index:
-            # Reagiert auf das 0x0C-Muster in Byte 1 für den Scharf-Status
+            # Evaluates true only if all masked bits match exactly (e.g. 0x0C in byte 1)
             self._attr_is_on = (data[self._byte_index] & self._bitmask) == self._bitmask
 
+
 class WiProSensor(WiProBaseSensor):
+    """Generic sensor evaluating whether any bit in the bitmask is active."""
+
     def __init__(self, hass, name, byte_index, bitmask, device_class=None):
         super().__init__(hass, name, device_class)
         self._byte_index = byte_index
@@ -56,10 +96,13 @@ class WiProSensor(WiProBaseSensor):
 
     def update_from_hex(self, data: bytes):
         if len(data) > self._byte_index:
-            # Reagiert, wenn in Byte 6 irgendein Bit ungleich 0 ist (Fenster offen)
+            # Evaluates true if any bit within the bitmask is set
             self._attr_is_on = bool(data[self._byte_index] & self._bitmask)
 
+
 class WiProRawSensor(WiProBaseSensor):
+    """Diagnostic sensor storing the raw hex string and split bytes in attributes."""
+
     def update_from_hex(self, data: bytes):
         self._attr_is_on = True
         self._attr_extra_state_attributes = {
