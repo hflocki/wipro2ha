@@ -1,1 +1,69 @@
+# Thitronik WiPro III - Home Assistant Integration (`wipro2ha`)
 
+Custom Home Assistant Component to integrate the **Thitronik WiPro III** alarm system via Bluetooth Low Energy (BLE) using passive/active GATT notifications.
+
+## Features
+
+* **Real-time Armed Status**: Monitors whether the alarm system is armed or disarmed (`binary_sensor.wipro_alarmanlage_scharf`).
+* **Wireless Contact Monitoring**: Detects open magnetic radio window/door contacts (`binary_sensor.wipro_funkkontakt_gesamt`).
+* **Bit-level Contact Identification**: Exposes individual bit sensors (Bit 0 to 7) to identify specific window or hatch sensors.
+* **Persistent Connection**: Uses `bleak-retry-connector` with background auto-reconnect loops for high availability.
+* **Raw Hex Diagnostics**: Raw state entity for debugging and decoding BLE status payloads.
+
+---
+
+## Reverse-Engineered Status Data Protocol
+
+The WiPro III sends status updates via BLE notifications on characteristic UUID `57695072-6f20-5374-6174-757320202020`.
+
+### 8-Byte Payload Structure
+
+Example payload: `01 8C 00 21 01 05 00 00`
+
+| Byte Index | Hex Value | Description |
+| :--- | :--- | :--- |
+| **Byte 0** | `0x01` | Unknown / System Indicator |
+| **Byte 1** | `0x8C` | **Alarm Status** (`0x0C` bitmask = Armed, `0x80` = Status flag) |
+| **Byte 2** | `0x00` | Vehicle Status |
+| **Byte 3** | `0x21` | Reserved / Unknown |
+| **Byte 4** | `0x01` | Reserved / Unknown |
+| **Byte 5** | `0x05` | Reserved / Unknown |
+| **Byte 6** | `0x00` | **Wireless Contacts** (`0x00` = All Closed, Bitmask for open sensors) |
+| **Byte 7** | `0x00` | Reserved / Unknown |
+
+---
+
+## Installation via HACS (Custom Repository)
+
+1. Open **Home Assistant** and navigate to **HACS** -> **Integrations**.
+2. Click the three dots in the top right corner and select **Custom repositories**.
+3. Add repository URL: `https://github.com/hflocki/wipro2ha`
+4. Category: **Integration**
+5. Click **Add**, search for **Thitronik WiPro III**, and click **Download**.
+6. Restart Home Assistant.
+
+*Note: For private repository usage, make sure your GitHub Personal Access Token (PAT) with `repo` scope is configured in the HACS integration settings.*
+
+---
+
+## Setup & Configuration
+
+1. Go to **Settings** -> **Devices & Services** -> **Add Integration**.
+2. Search for **Thitronik WiPro III**.
+3. Enter the **Bluetooth MAC Address** of your Thitronik BLE module (e.g., `E8:EB:1B:78:EC:1B`).
+4. Save the configuration.
+
+---
+
+## Created Entities
+
+* `binary_sensor.wipro_alarmanlage_scharf` (Safety Class: Armed / Disarmed)
+* `binary_sensor.wipro_funkkontakt_gesamt` (Window Class: Any wireless contact open)
+* `binary_sensor.wipro_funkkontakt_bit_0` ... `bit_7` (Window Class: Bitmask mapping)
+* `binary_sensor.wipro_raw_data` (Diagnostic: Displays all 8 raw bytes in state attributes)
+
+---
+
+## License
+
+MIT License
