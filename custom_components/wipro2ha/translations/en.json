@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "mac_address": "Bluetooth MAC address"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the WiPro III module. Make sure it is powered on and in Bluetooth range."
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  }
+}
