@@ -1,10 +1,10 @@
 {
   "domain": "wipro2ha",
-  "name": "Thitronik WiPro III",
+  "name": "WiproHA",
   "codeowners": ["@hflocki"],
   "config_flow": true,
   "documentation": "https://github.com/hflocki/wipro2ha",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "bluetooth": [
     {
       "service_uuid": "20546869-7472-6f6e-696b-20476d624820"
