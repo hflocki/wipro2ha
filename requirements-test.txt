@@ -1,0 +1,19 @@
+# Test dependencies for wipro2ha
+# Install with: pip install -r requirements-test.txt
+
+pytest>=8.0
+pytest-asyncio>=0.23
+
+# Provides a lightweight, working Home Assistant test environment
+# (fixtures, stubs, etc.) without needing the full HA core checkout.
+pytest-homeassistant-custom-component
+
+# Runtime deps the integration itself imports
+bleak>=0.20
+bleak-retry-connector>=3.0
+voluptuous
+
+# homeassistant.components.bluetooth transitively imports
+# homeassistant.components.usb, which needs pyserial even though
+# this integration never touches serial ports directly.
+pyserial
