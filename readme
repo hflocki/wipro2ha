@@ -89,3 +89,10 @@ All entities are grouped under a single **Thitronik WiPro III** device in Home A
 ## License
 
 MIT License
+
+
+---
+
+## References
+
+* BLE protocol and central locking mechanism research by Matthias Harzheim at [Camperflower Blog](https://camperflower.de/smart-camper-zentralverriegelung-und-thitronik-alarmanlage/).
