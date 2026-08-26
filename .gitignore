@@ -3,7 +3,10 @@ venv/
 ENV/
 *.venv
 .zed/
+.vscode/
+.idea/
 __pycache__/
 *.pyc
 .pytest_cache/
-
+.coverage
+htmlcov/
