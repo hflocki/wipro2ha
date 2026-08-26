@@ -1,8 +1,15 @@
+"""Binary sensor platform for the Thitronik WiPro III integration."""
+from __future__ import annotations
+
 from homeassistant.components.binary_sensor import (
-    BinarySensorEntity,
     BinarySensorDeviceClass,
+    BinarySensorEntity,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .coordinator import WiProDataUpdateCoordinator
 
 DOMAIN = "wipro2ha"
 
@@ -22,23 +29,27 @@ WIPRO_CONTACT_NAMES = {
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
-    # Main entities: Armed status, overall contact status, and raw data entity
+    coordinator: WiProDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    # Main entities: armed status, overall contact status, and raw data entity
     entities = [
         WiProAlarmSensor(
-            hass,
+            coordinator,
+            entry,
             "Alarmanlage Scharf",
             byte_index=1,
             bitmask=0x0C,
             device_class=BinarySensorDeviceClass.SAFETY,
         ),
         WiProSensor(
-            hass,
+            coordinator,
+            entry,
             "Funkkontakt Gesamt",
             byte_index=6,
             bitmask=0xFF,
             device_class=BinarySensorDeviceClass.WINDOW,
         ),
-        WiProRawSensor(hass, "Raw Data"),
+        WiProRawSensor(coordinator, entry, "Raw Data"),
     ]
 
     # Individual contact sensors for byte 6, named after the
@@ -47,7 +58,8 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         bitmask = 1 << bit
         entities.append(
             WiProSensor(
-                hass,
+                coordinator,
+                entry,
                 name,
                 byte_index=6,
                 bitmask=bitmask,
@@ -58,29 +70,37 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class WiProBaseSensor(BinarySensorEntity):
-    """Base class for all WiPro binary sensors."""
+class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySensorEntity):
+    """Base class for all WiPro binary sensors, driven by the shared coordinator."""
 
-    def __init__(self, hass, name, device_class=None):
-        self._hass = hass
+    def __init__(self, coordinator, entry, name, unique_suffix, device_class=None):
+        super().__init__(coordinator)
         self._attr_name = f"WiPro {name}"
         self._attr_device_class = device_class
         self._attr_is_on = False
 
-    async def async_added_to_hass(self):
-        """Subscribe to incoming raw BLE data events from Home Assistant event bus."""
-        @callback
-        def handle_raw_data(event):
-            raw_hex = event.data.get("raw")
-            if raw_hex:
-                try:
-                    data = bytes.fromhex(raw_hex)
-                    self.update_from_hex(data)
-                    self.async_write_ha_state()
-                except ValueError:
-                    pass
+        # entry is optional so these classes stay directly unit-testable
+        # (see tests/test_binary_sensor.py) without a full config entry.
+        if entry is not None:
+            self._attr_unique_id = f"{entry.entry_id}_{unique_suffix}"
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, entry.entry_id)},
+                name=entry.title,
+                manufacturer="Thitronik",
+                model="WiPro III",
+            )
 
-        self._hass.bus.async_listen(f"{DOMAIN}_raw_data", handle_raw_data)
+        # Apply whatever data the coordinator already has (e.g. after a
+        # reload) instead of waiting for the next BLE notification.
+        if coordinator is not None and coordinator.data is not None:
+            self.update_from_hex(coordinator.data)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Called by the coordinator whenever a new payload has arrived."""
+        if self.coordinator.data is not None:
+            self.update_from_hex(self.coordinator.data)
+        self.async_write_ha_state()
 
     def update_from_hex(self, data: bytes):
         """Base method to be overridden by subclasses for parsing data."""
@@ -90,8 +110,9 @@ class WiProBaseSensor(BinarySensorEntity):
 class WiProAlarmSensor(WiProBaseSensor):
     """Sensor specifically for exact bitmask match (e.g., Armed state on byte 1)."""
 
-    def __init__(self, hass, name, byte_index, bitmask, device_class=None):
-        super().__init__(hass, name, device_class)
+    def __init__(self, coordinator, entry, name, byte_index, bitmask, device_class=None):
+        unique_suffix = f"byte{byte_index}_eq{bitmask:02x}"
+        super().__init__(coordinator, entry, name, unique_suffix, device_class)
         self._byte_index = byte_index
         self._bitmask = bitmask
 
@@ -104,8 +125,9 @@ class WiProAlarmSensor(WiProBaseSensor):
 class WiProSensor(WiProBaseSensor):
     """Generic sensor evaluating whether any bit in the bitmask is active."""
 
-    def __init__(self, hass, name, byte_index, bitmask, device_class=None):
-        super().__init__(hass, name, device_class)
+    def __init__(self, coordinator, entry, name, byte_index, bitmask, device_class=None):
+        unique_suffix = f"byte{byte_index}_any{bitmask:02x}"
+        super().__init__(coordinator, entry, name, unique_suffix, device_class)
         self._byte_index = byte_index
         self._bitmask = bitmask
 
@@ -117,6 +139,9 @@ class WiProSensor(WiProBaseSensor):
 
 class WiProRawSensor(WiProBaseSensor):
     """Diagnostic sensor storing the raw hex string and split bytes in attributes."""
+
+    def __init__(self, coordinator, entry, name):
+        super().__init__(coordinator, entry, name, unique_suffix="raw_data")
 
     def update_from_hex(self, data: bytes):
         self._attr_is_on = True
