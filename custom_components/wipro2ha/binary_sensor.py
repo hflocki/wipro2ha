@@ -6,6 +6,20 @@ from homeassistant.core import HomeAssistant, callback
 
 DOMAIN = "wipro2ha"
 
+# Bit index -> contact name mapping (byte 6), reverse-engineered via
+# nRF Connect (see docs/nrf_connect_guide.md). Bits 5-7 are not yet
+# mapped; add them here once further contacts have been identified.
+WIPRO_CONTACT_NAMES = {
+    0: "Fahrerhaustür",
+    1: "Beifahrertür",
+    2: "Fenster",
+    3: "Heckgarage",
+    4: "Dachluke",
+    # 5: "TODO",
+    # 6: "TODO",
+    # 7: "TODO",
+}
+
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     # Main entities: Armed status, overall contact status, and raw data entity
@@ -27,13 +41,14 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         WiProRawSensor(hass, "Raw Data"),
     ]
 
-    # Dynamically generate 8 individual bit sensors for byte index 6 to identify contacts
-    for bit in range(8):
+    # Individual contact sensors for byte 6, named after the
+    # reverse-engineered mapping (see docs/nrf_connect_guide.md).
+    for bit, name in WIPRO_CONTACT_NAMES.items():
         bitmask = 1 << bit
         entities.append(
             WiProSensor(
                 hass,
-                f"Funkkontakt Bit {bit} (0x{bitmask:02X})",
+                name,
                 byte_index=6,
                 bitmask=bitmask,
                 device_class=BinarySensorDeviceClass.WINDOW,
