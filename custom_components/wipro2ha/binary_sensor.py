@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             "Alarmanlage Scharf",
             byte_index=1,
             bitmask=0x0C,
-            device_class=BinarySensorDeviceClass.LOCK,
+            #device_class=BinarySensorDeviceClass.LOCK,
         ),
         WiProSensor(
             coordinator,
