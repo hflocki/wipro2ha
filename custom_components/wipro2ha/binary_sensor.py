@@ -17,14 +17,14 @@ DOMAIN = "wipro2ha"
 # nRF Connect (see docs/nrf_connect_guide.md). Bits 5-7 are not yet
 # mapped; add them here once further contacts have been identified.
 WIPRO_CONTACT_NAMES = {
-    0: "Fahrerhaustür",
-    1: "Beifahrertür",
-    2: "Fenster",
-    3: "Heckgarage",
-    4: "Dachluke",
-    # 5: "TODO",
-    # 6: "TODO",
-    # 7: "TODO",
+    0: "Sensor 0",
+    1: "Sensor 1",
+    2: "Sensor 2",
+    3: "Sensor 3",
+    4: "Sensor 4",
+    # 5: "Sensor 5",
+    # 6: "Sensor 6",
+    # 7: "Sensor 7",
 }
 
 
@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             "Alarmanlage Scharf",
             byte_index=1,
             bitmask=0x0C,
-            device_class=BinarySensorDeviceClass.SAFETY,
+            device_class=BinarySensorDeviceClass.LOCK,
         ),
         WiProSensor(
             coordinator,
