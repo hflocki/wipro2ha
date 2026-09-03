@@ -2,27 +2,41 @@
   "config": {
     "step": {
       "user": {
+        "title": "Thitronik Einrichten",
+        "description": "Wähle deine Bluetooth-Adresse und den gewünschten Verbindungsmodus.",
         "data": {
-          "mac_address": "Bluetooth MAC address",
-          "connection_mode": "Verbindungsmodus",
-          "scan_interval": "Abfrage-Intervall (Sekunden, nur bei Intervall-Modus)"
+          "mac_address": "Bluetooth MAC-Adresse",
+          "connection_mode": "Verbindungsmodus"
+        }
+      },
+      "interval": {
+        "title": "Polling Intervall",
+        "description": "Gib an, in welchem Intervall (in Sekunden) der Status von der Alarmanlage abgefragt werden soll.",
+        "data": {
+          "scan_interval": "Abfrage-Intervall (Sekunden)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Could not connect to the WiPro III module. Make sure it is powered on and in Bluetooth range."
+      "cannot_connect": "Verbindung zur WiPro III fehlgeschlagen. Stelle sicher, dass das Modul eingeschaltet und in Reichweite ist."
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Dieses Gerät ist bereits konfiguriert."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Thitronik Optionen anpassen",
+        "title": "Verbindungsmodus wählen",
         "data": {
-          "connection_mode": "Verbindungsmodus",
-          "scan_interval": "Abfrage-Intervall (Sekunden, nur bei Intervall-Modus)"
+          "connection_mode": "Verbindungsmodus"
+        }
+      },
+      "interval": {
+        "title": "Polling Intervall anpassen",
+        "description": "Gib an, in welchem Intervall (in Sekunden) der Status abgefragt werden soll.",
+        "data": {
+          "scan_interval": "Abfrage-Intervall (Sekunden)"
         }
       }
     }
