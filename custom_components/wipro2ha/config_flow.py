@@ -10,15 +10,30 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
 )
+from homeassistant.core import callback
 import voluptuous as vol
 
 DOMAIN = "wipro2ha"
 _LOGGER = logging.getLogger(__name__)
 CONNECT_TIMEOUT = 10
 
+CONF_MODE = "connection_mode"
+CONF_INTERVAL = "scan_interval"
+
+MODE_PUSH = "push"
+MODE_POLL = "poll"
+
+DEFAULT_MODE = MODE_PUSH
+DEFAULT_INTERVAL = 30
+
 
 class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return ThitronikOptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -31,13 +46,23 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if await self._async_can_connect(mac_address):
                 return self.async_create_entry(
                     title=f"Thitronik ({mac_address})",
-                    data={"mac_address": mac_address}
+                    data={
+                        "mac_address": mac_address,
+                        CONF_MODE: user_input.get(CONF_MODE, DEFAULT_MODE),
+                        CONF_INTERVAL: user_input.get(CONF_INTERVAL, DEFAULT_INTERVAL),
+                    },
                 )
             errors["base"] = "cannot_connect"
 
-        # Neutraler Platzhalter für öffentliche Repositories
         data_schema = vol.Schema({
             vol.Required("mac_address", default="00:00:00:00:00:00"): str,
+            vol.Required(CONF_MODE, default=DEFAULT_MODE): vol.In({
+                MODE_PUSH: "Dauerhaft (Push / Notifications)",
+                MODE_POLL: "Intervall (Polling)",
+            }),
+            vol.Optional(CONF_INTERVAL, default=DEFAULT_INTERVAL): vol.All(
+                vol.Coerce(int), vol.Range(min=5, max=3600)
+            ),
         })
 
         return self.async_show_form(
@@ -50,9 +75,7 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Try a short-lived connection to confirm the device is reachable."""
         ble_device = async_ble_device_from_address(self.hass, address, connectable=True)
         if ble_device is None:
-            _LOGGER.debug(
-                "No BLE device found for %s during setup validation", address
-            )
+            _LOGGER.debug("No BLE device found for %s during setup validation", address)
             return False
 
         client = None
@@ -66,10 +89,8 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 timeout=CONNECT_TIMEOUT,
             )
-        except Exception as err:  # noqa: BLE001 - any failure here just means "unreachable"
-            _LOGGER.debug(
-                "Could not connect to %s during setup validation: %s", address, err
-            )
+        except Exception as err:
+            _LOGGER.debug("Could not connect to %s: %s", address, err)
             return False
         finally:
             if client and client.is_connected:
@@ -83,5 +104,39 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         return self.async_create_entry(
             title=f"Thitronik ({discovery_info.address})",
-            data={"mac_address": discovery_info.address}
+            data={
+                "mac_address": discovery_info.address,
+                CONF_MODE: DEFAULT_MODE,
+                CONF_INTERVAL: DEFAULT_INTERVAL,
+            }
         )
+
+
+class ThitronikOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for Thitronik WiPro III."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_mode = self.config_entry.options.get(
+            CONF_MODE, self.config_entry.data.get(CONF_MODE, DEFAULT_MODE)
+        )
+        current_interval = self.config_entry.options.get(
+            CONF_INTERVAL, self.config_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
+        )
+
+        options_schema = vol.Schema({
+            vol.Required(CONF_MODE, default=current_mode): vol.In({
+                MODE_PUSH: "Dauerhaft (Push / Notifications)",
+                MODE_POLL: "Intervall (Polling)",
+            }),
+            vol.Optional(CONF_INTERVAL, default=current_interval): vol.All(
+                vol.Coerce(int), vol.Range(min=5, max=3600)
+            ),
+        })
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)
