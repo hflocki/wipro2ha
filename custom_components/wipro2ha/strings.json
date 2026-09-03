@@ -3,7 +3,9 @@
     "step": {
       "user": {
         "data": {
-          "mac_address": "Bluetooth MAC address"
+          "mac_address": "Bluetooth MAC address",
+          "connection_mode": "Verbindungsmodus",
+          "scan_interval": "Abfrage-Intervall (Sekunden, nur bei Intervall-Modus)"
         }
       }
     },
@@ -12,6 +14,17 @@
     },
     "abort": {
       "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Thitronik Optionen anpassen",
+        "data": {
+          "connection_mode": "Verbindungsmodus",
+          "scan_interval": "Abfrage-Intervall (Sekunden, nur bei Intervall-Modus)"
+        }
+      }
     }
   }
 }
