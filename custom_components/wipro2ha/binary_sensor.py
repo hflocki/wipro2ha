@@ -13,25 +13,23 @@ from .coordinator import WiProDataUpdateCoordinator
 
 DOMAIN = "wipro2ha"
 
-# Bit index -> contact name mapping (byte 6), reverse-engineered via
-# nRF Connect (see docs/nrf_connect_guide.md). Bits 5-7 are not yet
-# mapped; add them here once further contacts have been identified.
+# Standard-Zuordnung für alle 8 Bits (Kontakt 0 bis 7)
 WIPRO_CONTACT_NAMES = {
-    0: "Sensor 0",
-    1: "Sensor 1",
-    2: "Sensor 2",
-    3: "Sensor 3",
-    4: "Sensor 4",
-    # 5: "Sensor 5",
-    # 6: "Sensor 6",
-    # 7: "Sensor 7",
+    0: "Kontakt 0",
+    1: "Kontakt 1",
+    2: "Kontakt 2",
+    3: "Kontakt 3",
+    4: "Kontakt 4",
+    5: "Kontakt 5",
+    6: "Kontakt 6",
+    7: "Kontakt 7",
 }
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     coordinator: WiProDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Main entities: armed status, overall contact status, and raw data entity
+    # Haupt-Entitäten inklusive Diagnosesensoren
     entities = [
         WiProAlarmSensor(
             coordinator,
@@ -39,7 +37,6 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             "Alarmanlage Scharf",
             byte_index=1,
             bitmask=0x0C,
-            #device_class=BinarySensorDeviceClass.LOCK,
         ),
         WiProSensor(
             coordinator,
@@ -50,10 +47,11 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             device_class=BinarySensorDeviceClass.WINDOW,
         ),
         WiProRawSensor(coordinator, entry, "Raw Data"),
+        # JETZT KORREKT EINGEBUNDEN:
+        WiProByte6DiagnosticSensor(coordinator, entry, "Byte 6 Diagnose"),
     ]
 
-    # Individual contact sensors for byte 6, named after the
-    # reverse-engineered mapping (see docs/nrf_connect_guide.md).
+    # Einzelne Kontaktsensoren (0 bis 7)
     for bit, name in WIPRO_CONTACT_NAMES.items():
         bitmask = 1 << bit
         entities.append(
@@ -64,6 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
                 byte_index=6,
                 bitmask=bitmask,
                 device_class=BinarySensorDeviceClass.WINDOW,
+                unique_suffix_override=f"contact_bit_{bit}",  # Eindeutige ID
             )
         )
 
@@ -79,8 +78,6 @@ class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySenso
         self._attr_device_class = device_class
         self._attr_is_on = False
 
-        # entry is optional so these classes stay directly unit-testable
-        # (see tests/test_binary_sensor.py) without a full config entry.
         if entry is not None:
             self._attr_unique_id = f"{entry.entry_id}_{unique_suffix}"
             self._attr_device_info = DeviceInfo(
@@ -90,8 +87,6 @@ class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySenso
                 model="WiPro III",
             )
 
-        # Apply whatever data the coordinator already has (e.g. after a
-        # reload) instead of waiting for the next BLE notification.
         if coordinator is not None and coordinator.data is not None:
             self.update_from_hex(coordinator.data)
 
@@ -103,8 +98,9 @@ class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySenso
         self.async_write_ha_state()
 
     def update_from_hex(self, data: bytes):
-        """Base method to be overridden by subclasses for parsing data."""
+        """Base method to be overridden by subclasses."""
         pass
+
 
 class WiProByte6DiagnosticSensor(WiProBaseSensor):
     """Diagnosesensor für den exakten Bitcode von Byte 6."""
@@ -121,53 +117,53 @@ class WiProByte6DiagnosticSensor(WiProBaseSensor):
                 "dezimal": val,
                 "binär": f"{val:08b}",  # Zeigt z. B. "00000100" an
             }
-            
+
+
 class WiProAlarmSensor(WiProBaseSensor):
     """Sensor specifically for exact bitmask match (e.g., Armed state on byte 1)."""
 
     def __init__(self, coordinator, entry, name, byte_index, bitmask, device_class=None):
-        unique_suffix = f"byte{byte_index}_eq{bitmask:02x}"
+        unique_suffix = f"byte{byte_index}_eq_{bitmask:02x}"
         super().__init__(coordinator, entry, name, unique_suffix, device_class)
         self._byte_index = byte_index
         self._bitmask = bitmask
 
     def update_from_hex(self, data: bytes):
         if len(data) > self._byte_index:
-            # Evaluates true only if all masked bits match exactly (e.g. 0x0C in byte 1)
             self._attr_is_on = (data[self._byte_index] & self._bitmask) == self._bitmask
 
 
 class WiProSensor(WiProBaseSensor):
     """Generic sensor evaluating whether any bit in the bitmask is active."""
 
-    def __init__(self, coordinator, entry, name, byte_index, bitmask, device_class=None):
-        unique_suffix = f"byte{byte_index}_any{bitmask:02x}"
+    def __init__(self, coordinator, entry, name, byte_index, bitmask, device_class=None, unique_suffix_override=None):
+        unique_suffix = unique_suffix_override or f"byte{byte_index}_any_{bitmask:02x}"
         super().__init__(coordinator, entry, name, unique_suffix, device_class)
         self._byte_index = byte_index
         self._bitmask = bitmask
 
     def update_from_hex(self, data: bytes):
         if len(data) > self._byte_index:
-            # Evaluates true if any bit within the bitmask is set
             self._attr_is_on = bool(data[self._byte_index] & self._bitmask)
 
 
 class WiProRawSensor(WiProBaseSensor):
-    """Diagnostic sensor storing the raw hex string and split bytes in attributes."""
+    """Diagnostic sensor storing raw hex string and split bytes in attributes."""
 
     def __init__(self, coordinator, entry, name):
         super().__init__(coordinator, entry, name, unique_suffix="raw_data")
 
     def update_from_hex(self, data: bytes):
         self._attr_is_on = True
-        self._attr_extra_state_attributes = {
-            "raw_hex": data.hex(),
-            "byte_0": f"0x{data[0]:02X}" if len(data) > 0 else None,
-            "byte_1": f"0x{data[1]:02X}" if len(data) > 1 else None,
-            "byte_2": f"0x{data[2]:02X}" if len(data) > 2 else None,
-            "byte_3": f"0x{data[3]:02X}" if len(data) > 3 else None,
-            "byte_4": f"0x{data[4]:02X}" if len(data) > 4 else None,
-            "byte_5": f"0x{data[5]:02X}" if len(data) > 5 else None,
-            "byte_6": f"0x{data[6]:02X}" if len(data) > 6 else None,
-            "byte_7": f"0x{data[7]:02X}" if len(data) > 7 else None,
-        }
+        if len(data) > 0:
+            self._attr_extra_state_attributes = {
+                "raw_hex": data.hex(),
+                "byte_0": f"0x{data[0]:02X}" if len(data) > 0 else None,
+                "byte_1": f"0x{data[1]:02X}" if len(data) > 1 else None,
+                "byte_2": f"0x{data[2]:02X}" if len(data) > 2 else None,
+                "byte_3": f"0x{data[3]:02X}" if len(data) > 3 else None,
+                "byte_4": f"0x{data[4]:02X}" if len(data) > 4 else None,
+                "byte_5": f"0x{data[5]:02X}" if len(data) > 5 else None,
+                "byte_6": f"0x{data[6]:02X}" if len(data) > 6 else None,
+                "byte_7": f"0x{data[7]:02X}" if len(data) > 7 else None,
+            }
