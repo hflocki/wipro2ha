@@ -36,18 +36,18 @@ DEFAULT_INTERVAL = 30
 
 
 class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    """Handle a config flow for Thitronik WiPro III."""
 
-    def __init__(self) -> None:
-        self._user_data: dict = {}
+    VERSION = 1
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return ThitronikOptionsFlowHandler(config_entry)
+        """Get the options flow for this handler."""
+        return ThitronikOptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
-        """Step 1: Get MAC Address and Connection Mode."""
+        """Single-step setup form."""
         errors = {}
 
         if user_input is not None:
@@ -56,20 +56,13 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             if await self._async_can_connect(mac_address):
-                self._user_data = {
-                    "mac_address": mac_address,
-                    CONF_MODE: user_input[CONF_MODE],
-                }
-
-                # Wenn Polling gewählt wurde -> weiter zu Schritt 2 (Intervall eingeben)
-                if user_input[CONF_MODE] == MODE_POLL:
-                    return await self.async_step_interval()
-
-                # Bei Push direkt abschließen
-                self._user_data[CONF_INTERVAL] = DEFAULT_INTERVAL
                 return self.async_create_entry(
                     title=f"Thitronik ({mac_address})",
-                    data=self._user_data,
+                    data={
+                        "mac_address": mac_address,
+                        CONF_MODE: user_input[CONF_MODE],
+                        CONF_INTERVAL: user_input[CONF_INTERVAL],
+                    },
                 )
 
             errors["base"] = "cannot_connect"
@@ -83,27 +76,8 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {"value": MODE_POLL, "label": "Intervall (Polling)"},
                     ],
                     mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_MODE,
                 )
             ),
-        })
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
-            errors=errors,
-        )
-
-    async def async_step_interval(self, user_input=None):
-        """Step 2: Get Polling Interval (Only shown when Polling is selected)."""
-        if user_input is not None:
-            self._user_data[CONF_INTERVAL] = user_input[CONF_INTERVAL]
-            return self.async_create_entry(
-                title=f"Thitronik ({self._user_data['mac_address']})",
-                data=self._user_data,
-            )
-
-        data_schema = vol.Schema({
             vol.Required(CONF_INTERVAL, default=DEFAULT_INTERVAL): NumberSelector(
                 NumberSelectorConfig(
                     min=5,
@@ -115,7 +89,11 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         })
 
-        return self.async_show_form(step_id="interval", data_schema=data_schema)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
 
     async def _async_can_connect(self, address: str) -> bool:
         """Try a short-lived connection to confirm the device is reachable."""
@@ -145,6 +123,7 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return True
 
     async def async_step_bluetooth(self, discovery_info: BluetoothServiceInfoBleak):
+        """Handle bluetooth discovery."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 
@@ -161,23 +140,16 @@ class ThitronikConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class ThitronikOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for Thitronik WiPro III."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-        self._options_data: dict = {}
-
     async def async_step_init(self, user_input=None):
-        """Step 1 in Options Flow: Select Mode."""
+        """Single-step options form."""
         if user_input is not None:
-            self._options_data[CONF_MODE] = user_input[CONF_MODE]
-
-            if user_input[CONF_MODE] == MODE_POLL:
-                return await self.async_step_interval()
-
-            self._options_data[CONF_INTERVAL] = DEFAULT_INTERVAL
-            return self.async_create_entry(title="", data=self._options_data)
+            return self.async_create_entry(title="", data=user_input)
 
         current_mode = self.config_entry.options.get(
             CONF_MODE, self.config_entry.data.get(CONF_MODE, DEFAULT_MODE)
+        )
+        current_interval = self.config_entry.options.get(
+            CONF_INTERVAL, self.config_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
         )
 
         options_schema = vol.Schema({
@@ -188,24 +160,8 @@ class ThitronikOptionsFlowHandler(config_entries.OptionsFlow):
                         {"value": MODE_POLL, "label": "Intervall (Polling)"},
                     ],
                     mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_MODE,
                 )
             ),
-        })
-
-        return self.async_show_form(step_id="init", data_schema=options_schema)
-
-    async def async_step_interval(self, user_input=None):
-        """Step 2 in Options Flow: Select Interval (Only shown if Polling active)."""
-        if user_input is not None:
-            self._options_data[CONF_INTERVAL] = user_input[CONF_INTERVAL]
-            return self.async_create_entry(title="", data=self._options_data)
-
-        current_interval = self.config_entry.options.get(
-            CONF_INTERVAL, self.config_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
-        )
-
-        options_schema = vol.Schema({
             vol.Required(CONF_INTERVAL, default=current_interval): NumberSelector(
                 NumberSelectorConfig(
                     min=5,
@@ -217,4 +173,4 @@ class ThitronikOptionsFlowHandler(config_entries.OptionsFlow):
             ),
         })
 
-        return self.async_show_form(step_id="interval", data_schema=options_schema)
+        return self.async_show_form(step_id="init", data_schema=options_schema)
