@@ -106,7 +106,22 @@ class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySenso
         """Base method to be overridden by subclasses for parsing data."""
         pass
 
+class WiProByte6DiagnosticSensor(WiProBaseSensor):
+    """Diagnosesensor für den exakten Bitcode von Byte 6."""
 
+    def __init__(self, coordinator, entry, name):
+        super().__init__(coordinator, entry, name, unique_suffix="byte6_diagnostic")
+
+    def update_from_hex(self, data: bytes):
+        if len(data) > 6:
+            val = data[6]
+            self._attr_is_on = val > 0
+            self._attr_extra_state_attributes = {
+                "hex": f"0x{val:02X}",
+                "dezimal": val,
+                "binär": f"{val:08b}",  # Zeigt z. B. "00000100" an
+            }
+            
 class WiProAlarmSensor(WiProBaseSensor):
     """Sensor specifically for exact bitmask match (e.g., Armed state on byte 1)."""
 
