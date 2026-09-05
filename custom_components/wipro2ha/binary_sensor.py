@@ -13,23 +13,25 @@ from .coordinator import WiProDataUpdateCoordinator
 
 DOMAIN = "wipro2ha"
 
-# Standard-Zuordnung für alle 8 Bits (Kontakt 0 bis 7)
-WIPRO_CONTACT_NAMES = {
-    0: "Kontakt 0",
-    1: "Kontakt 1",
-    2: "Kontakt 2",
-    3: "Kontakt 3",
-    4: "Kontakt 4",
-    5: "Kontakt 5",
-    6: "Kontakt 6",
-    7: "Kontakt 7",
-}
+# Zuordnung: (Name, Exakter Hex-Wert / Maske)
+# Wir nutzen exakte Byte-Muster, damit Kombi-Signale (z. B. 0x0B im Bad)
+# nicht mehr versehentlich mehrere Kontakte gleichzeitig auslösen.
+EXACT_CONTACT_MAPPING = [
+    ("Kontakt 0", 0x09),
+    ("Kontakt 1", 0x0A),
+    ("Kontakt 2", 0x04),  
+    ("Kontakt 3", 0x08),  
+    ("Kontakt 4", 0x03),  
+    ("Kontakt 5", 0x0B),  
+    ("Kontakt 6", 0x10), #unknown
+    ("Kontakt 7", 0x20), #unknown
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     coordinator: WiProDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Haupt-Entitäten inklusive Diagnosesensoren
+    # Haupt-Entitäten
     entities = [
         WiProAlarmSensor(
             coordinator,
@@ -47,22 +49,20 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             device_class=BinarySensorDeviceClass.WINDOW,
         ),
         WiProRawSensor(coordinator, entry, "Raw Data"),
-        # JETZT KORREKT EINGEBUNDEN:
         WiProByte6DiagnosticSensor(coordinator, entry, "Byte 6 Diagnose"),
     ]
 
-    # Einzelne Kontaktsensoren (0 bis 7)
-    for bit, name in WIPRO_CONTACT_NAMES.items():
-        bitmask = 1 << bit
+    # Generische Kontaktsensoren Kontakt 0 bis 7 auf exakte Matches prüfen
+    for index, (name, match_val) in enumerate(EXACT_CONTACT_MAPPING):
         entities.append(
-            WiProSensor(
+            WiProExactMatchSensor(
                 coordinator,
                 entry,
                 name,
                 byte_index=6,
-                bitmask=bitmask,
+                target_value=match_val,
                 device_class=BinarySensorDeviceClass.WINDOW,
-                unique_suffix_override=f"contact_bit_{bit}",  # Eindeutige ID
+                unique_suffix_override=f"contact_exact_{index}",
             )
         )
 
@@ -102,6 +102,20 @@ class WiProBaseSensor(CoordinatorEntity[WiProDataUpdateCoordinator], BinarySenso
         pass
 
 
+class WiProExactMatchSensor(WiProBaseSensor):
+    """Sensor that triggers ONLY if byte value matches target value exactly."""
+
+    def __init__(self, coordinator, entry, name, byte_index, target_value, device_class=None, unique_suffix_override=None):
+        unique_suffix = unique_suffix_override or f"byte{byte_index}_eq_{target_value:02x}"
+        super().__init__(coordinator, entry, name, unique_suffix, device_class)
+        self._byte_index = byte_index
+        self._target_value = target_value
+
+    def update_from_hex(self, data: bytes):
+        if len(data) > self._byte_index:
+            self._attr_is_on = (data[self._byte_index] == self._target_value)
+
+
 class WiProByte6DiagnosticSensor(WiProBaseSensor):
     """Diagnosesensor für den exakten Bitcode von Byte 6."""
 
@@ -115,7 +129,7 @@ class WiProByte6DiagnosticSensor(WiProBaseSensor):
             self._attr_extra_state_attributes = {
                 "hex": f"0x{val:02X}",
                 "dezimal": val,
-                "binär": f"{val:08b}",  # Zeigt z. B. "00000100" an
+                "binär": f"{val:08b}",
             }
 
 
