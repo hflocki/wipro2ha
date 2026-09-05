@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from .coordinator import WiProDataUpdateCoordinator
 
 DOMAIN = "wipro2ha"
-PLATFORMS = ["binary_sensor"]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
