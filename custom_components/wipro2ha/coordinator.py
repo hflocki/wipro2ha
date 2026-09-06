@@ -4,7 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
+from bleak import BleakClient
+from bleak_retry_connector import establish_connection
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -28,7 +29,7 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
         super().__init__(hass, _LOGGER, name=DOMAIN)
         self.entry = entry
         self.address: str = entry.data.get("mac_address", entry.unique_id)
-        self._client: BleakClientWithServiceCache | None = None
+        self._client: BleakClient | None = None
         self._connection_task: asyncio.Task | None = None
 
     @property
@@ -68,46 +69,36 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
     async def _main_loop(self) -> None:
         while True:
             try:
-                _LOGGER.debug("[%s] Suche BLE-Gerät im HA Bluetooth-Stack...", self.address)
                 ble_device = async_ble_device_from_address(
                     self.hass, self.address, connectable=True
                 )
 
                 if not ble_device:
-                    _LOGGER.warning("[%s] Gerät nicht in BLE-Reichweite / nicht von HA gefunden", self.address)
+                    _LOGGER.debug("[%s] Gerät nicht in BLE-Reichweite", self.address)
                 else:
-                    _LOGGER.debug("[%s] Verbindungsaufbau läuft...", self.address)
                     self._client = await establish_connection(
-                        client_class=BleakClientWithServiceCache,
+                        client_class=BleakClient,
                         device=ble_device,
                         name=self.address,
                         hass=self.hass,
                     )
 
                     if self.mode == MODE_PUSH:
-                        _LOGGER.info("[%s] BLE Verbunden. Aktiviere Notifications auf UUID %s", self.address, STATUS_UUID)
                         await self._client.start_notify(
                             STATUS_UUID, self._handle_notification
                         )
-
-                        # Initialen Status abfragen und Status als erfolgreich markieren
-                        init_data = await self._client.read_gatt_char(STATUS_UUID)
-                        self.async_set_updated_data(bytes(init_data))
                         self.last_update_success = True
 
-                        # Verbindung aufrechterhalten
-                        while self._client.is_connected and self.mode == MODE_PUSH:
-                            await asyncio.sleep(5)
+                        while self._client and self._client.is_connected and self.mode == MODE_PUSH:
+                            await asyncio.sleep(1)
 
                         if self._client and self._client.is_connected:
                             await self._client.stop_notify(STATUS_UUID)
 
                     else:
-                        _LOGGER.debug("[%s] Lese GATT-Charakteristik (Polling)...", self.address)
                         data = await self._client.read_gatt_char(STATUS_UUID)
                         self.async_set_updated_data(bytes(data))
                         self.last_update_success = True
-                        _LOGGER.info("[%s] Erfolgreich gelesen: %s", self.address, bytes(data).hex())
 
                         await self._client.disconnect()
                         self._client = None
@@ -116,7 +107,7 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                         continue
 
             except Exception as err:
-                _LOGGER.error("[%s] BLE-Fehler im Loop (%s): %s", self.address, type(err).__name__, err, exc_info=True)
+                _LOGGER.debug("[%s] BLE Verbindungsunterbrechung: %s", self.address, err)
 
             if self._client and self._client.is_connected:
                 try:
@@ -125,5 +116,4 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                     pass
             self._client = None
 
-            _LOGGER.debug("[%s] Warte %ss vor neuem Verbindungsversuch...", self.address, RECONNECT_DELAY)
             await asyncio.sleep(RECONNECT_DELAY)
