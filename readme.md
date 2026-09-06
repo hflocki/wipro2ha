@@ -6,48 +6,54 @@ Custom Home Assistant Component to integrate the **Thitronik WiPro III** alarm s
 
 ## Features
 
-* **Real-time Armed Status**: Monitors whether the alarm system is armed or disarmed (`binary_sensor.wipro_alarmanlage_scharf`).
-* **Wireless Contact Monitoring**: Detects open magnetic radio window/door contacts (`binary_sensor.wipro_funkkontakt_gesamt`).
-* **Named Contact Sensors**: Exposes individual sensors for each mapped wireless contact (e.g. driver door, passenger door, skylight - see [Created Entities](#created-entities)).
-* **Coordinator-based Updates**: A shared `DataUpdateCoordinator` owns the BLE connection and distributes the latest status to all entities, so parsing only happens once per notification.
-* **Persistent Connection**: Uses `bleak-retry-connector` with background auto-reconnect loops for high availability.
-* **Setup Validation**: When adding the integration, a short connection attempt confirms the module is actually reachable before the config entry is created.
-* **Raw Hex Diagnostics**: Raw state entity for debugging and decoding BLE status payloads.
+* **Real-time Armed Status**: Monitors whether the alarm system is armed or disarmed (`binary_sensor.wipro_alarmanlage_scharf`)[cite: 2].
+* **Wireless Contact Monitoring**: Detects open magnetic radio window/door contacts (`binary_sensor.wipro_funkkontakt_gesamt`)[cite: 2].
+* **Exact Hex-Match Contacts**: Individual sensors (`Kontakt 0` to `Kontakt 7`) mapped via exact hex-patterns to avoid false multi-triggering.
+* **Human-Readable Alarm Reason**: Parses Byte 2 to decode and display the exact trigger reason (e.g., *Jammer Detection*, *Break-in Door*, *Radio Cable Loop*)[cite: 1, 6].
+* **Live Hex Pattern Diagnostic**: Dedicated text sensor displaying Byte 6 as `0x0B (00001011)` for easy contact identification on your dashboard[cite: 6].
+* **Push & Polling Modes**: Supports both persistent connection (Push / Notifications) and configurable Polling intervals[cite: 3, 4].
+* **Coordinator-based Updates**: A shared `DataUpdateCoordinator` owns the BLE connection and distributes payloads efficiently[cite: 4].
+* **Persistent Connection**: Uses `bleak-retry-connector` with background auto-reconnect loops for high availability[cite: 3, 4].
 
 ---
 
 ## Reverse-Engineered Status Data Protocol
 
-The WiPro III sends status updates via BLE notifications on characteristic UUID `57695072-6f20-5374-6174-757320202020`.
+The WiPro III sends status updates via BLE notifications on characteristic UUID `57695072-6f20-5374-6174-757320202020`[cite: 4].
 
 ### 8-Byte Payload Structure
 
-Example payload: `01 8C 00 21 01 05 00 00`
+Example payload: `01 8C 25 21 01 05 0B 00`
 
 | Byte Index | Hex Value | Description |
 | :--- | :--- | :--- |
 | **Byte 0** | `0x01` | Unknown / System Indicator |
 | **Byte 1** | `0x8C` | **Alarm Status** (`0x0C` bitmask = Armed, `0x80` = Status flag) |
-| **Byte 2** | `0x00` | Vehicle Status |
+| **Byte 2** | `0x25` | **Alarm Reason Code** (Decodes why the alarm was triggered; see map below)[cite: 1, 6] |
 | **Byte 3** | `0x21` | Reserved / Unknown |
 | **Byte 4** | `0x01` | Reserved / Unknown |
 | **Byte 5** | `0x05` | Reserved / Unknown |
-| **Byte 6** | `0x00` | **Wireless Contacts** (`0x00` = All Closed, Bitmask for open sensors) |
+| **Byte 6** | `0x0B` | **Wireless Contacts** (`0x00` = All Closed, Exact Hex-Pattern for open sensors)[cite: 2, 6] |
 | **Byte 7** | `0x00` | Reserved / Unknown |
 
-Full bit-level contact mapping for Byte 6 is documented in [`docs/nrf_connect_guide.md`](docs/nrf_connect_guide.md).
+### Alarm Reason Mapping (Byte 2)
+
+| Code | Description |
+| :--- | :--- |
+| `0` | No Alarm / Clear[cite: 1] |
+| `1 - 31` | Triggered Radio Contact Index (1 to 31)[cite: 1, 6] |
+| `32` | Break-in Door (Interior Light)[cite: 1] |
+| `33` | Break-in Door (CAN-Bus)[cite: 1] |
+| `36` | Gas Detector Triggered[cite: 1] |
+| `37` | Jammer Detection (Interference Detected)[cite: 1] |
+| `38` | Radio Cable Loop Disconnected[cite: 1] |
+| `225` | Panic Alarm (App / Button)[cite: 1] |
 
 ---
 
 ## Security Considerations
 
-This integration only *reads* status data - it does not expose any way to arm, disarm, or otherwise control the alarm system. The main thing to be aware of is that BLE status notifications can, in principle, be read by anyone within Bluetooth range (roughly 10-30 m) of the vehicle, not just Home Assistant. Whether that's a meaningful risk in practice depends on the WiPro III module's own BLE security (pairing/bonding, encryption) rather than on this integration.
-
-If you're evaluating whether to expose this project publicly:
-
-* Check whether your module requires pairing/bonding before it will send notifications. If it does, casual eavesdropping is significantly harder.
-* If you find that status data (or, worse, a writable/control characteristic) is accessible without any authentication, please report that to Thitronik directly rather than publishing exploit details - that would be a weakness in the device's own firmware, not in this integration.
-* This project intentionally does not implement any write/control functionality, and contributions adding one should be considered carefully.
+This integration only *reads* status data - it does not expose any way to arm, disarm, or otherwise control the alarm system[cite: 1]. The main thing to be aware of is that BLE status notifications can, in principle, be read by anyone within Bluetooth range (roughly 10-30 m) of the vehicle, not just Home Assistant. Whether that's a meaningful risk in practice depends on the WiPro III module's own BLE security (pairing/bonding, encryption) rather than on this integration.
 
 ---
 
@@ -60,51 +66,41 @@ If you're evaluating whether to expose this project publicly:
 5. Click **Add**, search for **Thitronik WiPro III**, and click **Download**.
 6. Restart Home Assistant.
 
-*Note: For private repository usage, make sure your GitHub Personal Access Token (PAT) with `repo` scope is configured in the HACS integration settings.*
-
 ---
 
 ## Setup & Configuration
 
 1. Go to **Settings** -> **Devices & Services** -> **Add Integration**.
-2. Search for **Thitronik WiPro III**.
-3. Enter the **Bluetooth MAC Address** of your Thitronik BLE module (e.g., `AA:BB:CC:DD:EE:FF`).
-4. Save the configuration. The integration will attempt a short connection to confirm the module is reachable before creating the entry - if it fails, double-check the MAC address and that the module is powered on and in range.
+2. Search for **Thitronik WiPro III**[cite: 3, 5].
+3. Enter the **Bluetooth MAC Address** of your Thitronik BLE module (e.g., `AA:BB:CC:DD:EE:FF`)[cite: 3, 4].
+4. Select Connection Mode (**Push** or **Polling**) and scan interval[cite: 3, 4].
+5. Save the configuration[cite: 3]. The integration will validate connection before saving[cite: 3].
 
 ---
 
 ## Created Entities
 
-All entities are grouped under a single **Thitronik WiPro III** device in Home Assistant.
+All entities are grouped under a single **Thitronik WiPro III** device in Home Assistant[cite: 2, 6].
 
-* `binary_sensor.wipro_alarmanlage_scharf` (Safety Class: Armed / Disarmed)
-* `binary_sensor.wipro_funkkontakt_gesamt` (Window Class: Any wireless contact open)
-* Individual named contact sensors (Window Class), one per mapped bit in Byte 6:
-  * Fahrerhaustür, Beifahrertür, Fenster, Heckgarage, Dachluke
-  * (Bits 5-7 are not yet mapped - see [`docs/nrf_connect_guide.md`](docs/nrf_connect_guide.md) to contribute a mapping)
-* `binary_sensor.wipro_raw_data` (Diagnostic: Displays all 8 raw bytes in state attributes)
+### Binary Sensors (`binary_sensor`)
+* `binary_sensor.wipro_alarmanlage_scharf` (Safety Class: Armed / Disarmed)[cite: 2]
+* `binary_sensor.wipro_funkkontakt_gesamt` (Window Class: Any wireless contact open)[cite: 2]
+* `binary_sensor.wipro_kontakt_0` to `binary_sensor.wipro_kontakt_7` (Window Class: Individual exact-match contact sensors)[cite: 2]
+* `binary_sensor.wipro_raw_data` (Diagnostic: Displays all raw bytes in state attributes)[cite: 2]
+* `binary_sensor.wipro_byte_6_diagnose` (Diagnostic: On/Off state for Byte 6)[cite: 2]
 
----
-
-## License
-
-MIT License
-
+### Text Sensors (`sensor`)
+* `sensor.wipro_alarmgrund` (Diagnostic: Displays human-readable alarm trigger reasons)[cite: 6]
+* `sensor.wipro_byte_6_hex_muster` (Diagnostic: Displays current Byte 6 pattern in Hex & Binary, e.g. `0x0B (00001011)`)[cite: 6]
 
 ---
 
-## References
+## Debugging & Logging
 
-* BLE protocol and central locking mechanism research by Matthias Harzheim at [Camperflower Blog](https://camperflower.de/smart-camper-zentralverriegelung-und-thitronik-alarmanlage/).
+To enable verbose logging for troubleshooting BLE connection or raw payload issues, add the following snippet to your `configuration.yaml`:
 
-
----
-
-### 💬 Danksagung / Credits
-
-Thanks to [@to0b](https://github.com/to0b)
-
-
-<a href="https://www.buymeacoffee.com/hflocki" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60" width="217">
-</a>
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.wipro2ha: debug
