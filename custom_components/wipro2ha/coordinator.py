@@ -33,31 +33,30 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
 
     @property
     def mode(self) -> str:
-        """Get connection mode (Options take precedence over Entry Data)."""
         return self.entry.options.get(
             CONF_MODE, self.entry.data.get(CONF_MODE, MODE_PUSH)
         )
 
     @property
     def scan_interval(self) -> int:
-        """Get scan interval in seconds."""
         return self.entry.options.get(
             CONF_INTERVAL, self.entry.data.get(CONF_INTERVAL, 30)
         )
 
     @callback
     def _handle_notification(self, _sender, data: bytearray) -> None:
-        """Handle an incoming status notification from the WiPro BLE device."""
-        self.async_set_updated_data(bytes(data))
+        raw_bytes = bytes(data)
+        _LOGGER.debug("[%s] Empfangene BLE-Daten: %s", self.address, raw_bytes.hex())
+        self.async_set_updated_data(raw_bytes)
 
     async def async_start(self) -> None:
-        """Start the background connection/reconnect loop."""
+        _LOGGER.info("[%s] Starte WiPro BLE Loop (Modus: %s)", self.address, self.mode)
         self._connection_task = self.hass.async_create_background_task(
             self._main_loop(), name=f"{DOMAIN}_ble_connection"
         )
 
     async def async_stop(self) -> None:
-        """Stop the background connection loop and disconnect cleanly."""
+        _LOGGER.info("[%s] Stoppe WiPro BLE Loop", self.address)
         if self._connection_task:
             self._connection_task.cancel()
             self._connection_task = None
@@ -67,13 +66,17 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
         self._client = None
 
     async def _main_loop(self) -> None:
-        """Main execution loop supporting both Push and Polling modes."""
         while True:
             try:
+                _LOGGER.debug("[%s] Suche BLE-Gerät im HA Bluetooth-Stack...", self.address)
                 ble_device = async_ble_device_from_address(
                     self.hass, self.address, connectable=True
                 )
-                if ble_device:
+                
+                if not ble_device:
+                    _LOGGER.warning("[%s] Gerät nicht in BLE-Reichweite / nicht von HA gefunden", self.address)
+                else:
+                    _LOGGER.debug("[%s] Verbindungsaufbau läuft...", self.address)
                     self._client = await establish_connection(
                         client_class=BleakClientWithServiceCache,
                         device=ble_device,
@@ -82,25 +85,23 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                     )
 
                     if self.mode == MODE_PUSH:
-                        # PUSH MODUS: Permanent verbunden bleiben und benachrichtigen
+                        _LOGGER.info("[%s] BLE Verbunden. Aktiviere Notifications auf UUID %s", self.address, STATUS_UUID)
                         await self._client.start_notify(
                             STATUS_UUID, self._handle_notification
                         )
-                        self.last_update_success = True
-                        _LOGGER.info("Connected to WiPro III BLE (Push Mode)")
+                        self.async_set_update_completed()
 
                         while self._client.is_connected and self.mode == MODE_PUSH:
                             await asyncio.sleep(5)
 
-                        if self._client.is_connected:
+                        if self._client and self._client.is_connected:
                             await self._client.stop_notify(STATUS_UUID)
 
                     else:
-                        # POLLING MODUS: Einmalig lesen, trennen und X Sekunden warten
+                        _LOGGER.debug("[%s] Lese GATT-Charakteristik (Polling)...", self.address)
                         data = await self._client.read_gatt_char(STATUS_UUID)
                         self.async_set_updated_data(bytes(data))
-                        self.last_update_success = True
-                        _LOGGER.debug("Polled WiPro III BLE successfully")
+                        _LOGGER.info("[%s] Erfolgreich gelesen: %s", self.address, bytes(data).hex())
 
                         await self._client.disconnect()
                         self._client = None
@@ -109,17 +110,14 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                         continue
 
             except Exception as err:
-                self.last_update_success = False
-                self.async_update_listeners()
-                _LOGGER.warning(
-                    "BLE task error (%s mode): %s. Retrying in %ss...",
-                    self.mode,
-                    err,
-                    RECONNECT_DELAY,
-                )
+                _LOGGER.error("[%s] BLE-Fehler im Loop (%s): %s", self.address, type(err).__name__, err, exc_info=True)
 
             if self._client and self._client.is_connected:
-                await self._client.disconnect()
+                try:
+                    await self._client.disconnect()
+                except Exception:
+                    pass
             self._client = None
 
+            _LOGGER.debug("[%s] Warte %ss vor neuem Verbindungsversuch...", self.address, RECONNECT_DELAY)
             await asyncio.sleep(RECONNECT_DELAY)
