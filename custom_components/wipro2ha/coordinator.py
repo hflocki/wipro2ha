@@ -89,8 +89,13 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                         await self._client.start_notify(
                             STATUS_UUID, self._handle_notification
                         )
+
+                        # Initialen Status abfragen und Status als erfolgreich markieren
+                        init_data = await self._client.read_gatt_char(STATUS_UUID)
+                        self.async_set_updated_data(bytes(init_data))
                         self.last_update_success = True
 
+                        # Verbindung aufrechterhalten
                         while self._client.is_connected and self.mode == MODE_PUSH:
                             await asyncio.sleep(5)
 
