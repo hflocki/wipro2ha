@@ -72,7 +72,7 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                 ble_device = async_ble_device_from_address(
                     self.hass, self.address, connectable=True
                 )
-                
+
                 if not ble_device:
                     _LOGGER.warning("[%s] Gerät nicht in BLE-Reichweite / nicht von HA gefunden", self.address)
                 else:
@@ -89,7 +89,7 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                         await self._client.start_notify(
                             STATUS_UUID, self._handle_notification
                         )
-                        self.async_set_update_completed()
+                        self.last_update_success = True
 
                         while self._client.is_connected and self.mode == MODE_PUSH:
                             await asyncio.sleep(5)
@@ -101,6 +101,7 @@ class WiProDataUpdateCoordinator(DataUpdateCoordinator[bytes]):
                         _LOGGER.debug("[%s] Lese GATT-Charakteristik (Polling)...", self.address)
                         data = await self._client.read_gatt_char(STATUS_UUID)
                         self.async_set_updated_data(bytes(data))
+                        self.last_update_success = True
                         _LOGGER.info("[%s] Erfolgreich gelesen: %s", self.address, bytes(data).hex())
 
                         await self._client.disconnect()
